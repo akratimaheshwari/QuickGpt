@@ -1,13 +1,69 @@
 import React, { useState } from "react";
 import { useAppContext } from "../context/AppContext";
+import axios from "axios";
 import { assets } from "../assets/assets";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 
 const SideBar = ({ isMenuOpen, setIsMenuOpen }) => {
-  const { chats, setSelectedChats, theme, setTheme, user } = useAppContext();
+  const {
+    chats,
+    setSelectedChat,
+    theme,
+    setTheme,
+    user,
+    createNewChat,
+    setChats,
+    fetchUserChats,
+    setToken,
+    token,
+  } = useAppContext();
+
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    setToken(null);
+    toast.success("Logged out successfully");
+  };
+
+  // deleteChat now takes only chatId and returns the promise
+  const deleteChat = async (chatId) => {
+    try {
+      const confirmDelete = window.confirm(
+        "Are you sure you want to delete this chat?"
+      );
+      if (!confirmDelete) return Promise.resolve(); // resolved promise so toast.promise works
+
+      const { data } = await axios.post(
+        "/api/chat/delete",
+        { chatId },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (data?.success) {
+        setChats((prev) => prev.filter((chat) => chat._id !== chatId));
+        await fetchUserChats();
+        toast.success(data.message);
+      } else {
+        toast.error(data?.message || "Delete failed");
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error.message);
+    }
+  };
+
+  // safe filter + preview generation
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredChats = (chats || []).filter((chat) => {
+    const firstMsg = chat?.messages?.[0];
+    const content = (firstMsg?.content ?? chat?.name ?? "").toString();
+    return content.toLowerCase().includes(normalizedSearch);
+  });
 
   return (
     <div
@@ -27,6 +83,7 @@ const SideBar = ({ isMenuOpen, setIsMenuOpen }) => {
 
       {/* New chat button */}
       <button
+        onClick={createNewChat}
         className="flex justify-center items-center w-full py-2 mt-10
         text-white bg-gradient-to-r from-[#A456F7] to-[#3D81F6] 
         text-sm rounded-md cursor-pointer hover:opacity-90"
@@ -50,27 +107,24 @@ const SideBar = ({ isMenuOpen, setIsMenuOpen }) => {
       </div>
 
       {/* Recent chats */}
-      {chats.length > 0 && (
+      {filteredChats.length > 0 && (
         <p className="mt-4 text-gray-500 dark:text-gray-300 text-xs uppercase tracking-wider">
           Recent Chats
         </p>
       )}
 
       <div className="flex-1 overflow-y-auto mt-3 text-sm space-y-3">
-        {chats
-          .filter((chat) =>
-            chat.messages[0]
-              ? chat.messages[0]?.content
-                  .toLowerCase()
-                  .includes(search.toLowerCase())
-              : chat.name.toLowerCase().includes(search.toLowerCase())
-          )
-          .map((chat) => (
-            <div 
+        {filteredChats.map((chat) => {
+          const firstMsg = chat?.messages?.[0];
+          const preview = chat.title || (firstMsg?.content ?? "").slice(0, 32) || "New Chat";
+          const time = moment(chat?.updatedAt ?? chat?.createdAt ?? Date.now()).fromNow();
+
+          return (
+            <div
               key={chat._id}
               onClick={() => {
-                setSelectedChats(chat);
-                navigate('/');
+                setSelectedChat(chat);
+                navigate("/");
                 setIsMenuOpen(false);
               }}
               className="p-2 px-4 dark:bg-[#57317C]/10 border border-gray-300 
@@ -78,22 +132,28 @@ const SideBar = ({ isMenuOpen, setIsMenuOpen }) => {
               hover:bg-[#57317C]/20 transition"
             >
               <div>
-                <p className="truncate w-full">
-                  {chat.messages.length > 0
-                    ? chat.messages[0].content.slice(0, 32)
-                    : chat.name}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-[#B1A6C0]">
-                  {moment(chat.updatedAt).fromNow()}
-                </p>
+                <p className="truncate w-full">{preview}</p>
+                <p className="text-xs text-gray-500 dark:text-[#B1A6C0]">{time}</p>
               </div>
+
               <img
                 src={assets.bin_icon}
                 className="hidden group-hover:block w-4 cursor-pointer invert dark:invert-0"
                 alt=""
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const p = deleteChat(chat._id);
+                  // show toast while promise resolves
+                  toast.promise(p, {
+                    loading: "deleting...",
+                    success: "Deleted",
+                    error: "Delete failed",
+                  });
+                }}
               />
             </div>
-          ))}
+          );
+        })}
       </div>
 
       {/* Community Images */}
@@ -121,9 +181,7 @@ const SideBar = ({ isMenuOpen, setIsMenuOpen }) => {
         <img src={assets.diamond_icon} className="w-4 dark:invert" alt="" />
         <div className="flex flex-col text-sm">
           <p>Credits: {user?.credits ?? 0}</p>
-          <p className="text-xs text-gray-500">
-            Purchase credits to use QuickGPT
-          </p>
+          <p className="text-xs text-gray-500">Purchase credits to use QuickGPT</p>
         </div>
       </div>
 
@@ -140,28 +198,18 @@ const SideBar = ({ isMenuOpen, setIsMenuOpen }) => {
             className="sr-only peer"
             checked={theme === "dark"}
           />
-          <div
-            className="w-9 h-5 bg-gray-400 rounded-full
-            peer-checked:bg-purple-600 transition-all"
-          ></div>
-          <span
-            className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full
-            transition-transform peer-checked:translate-x-4"
-          ></span>
+          <div className="w-9 h-5 bg-gray-400 rounded-full peer-checked:bg-purple-600 transition-all"></div>
+          <span className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
         </label>
       </div>
 
       {/* User Account */}
-      <div
-        className="flex items-center gap-3 p-3 mt-4 border border-gray-300
-        dark:border-white/15 rounded-md cursor-pointer group"
-      >
+      <div className="flex items-center gap-3 p-3 mt-4 border border-gray-300 dark:border-white/15 rounded-md cursor-pointer group">
         <img src={assets.user_icon} className="w-7 rounded-full" alt="" />
-        <p className="flex-1 text-sm dark:text-primary truncate">
-          {user ? user.name : "Login your account"}
-        </p>
+        <p className="flex-1 text-sm dark:text-primary truncate">{user ? user.name : "Login your account"}</p>
         {user && (
           <img
+            onClick={logout}
             src={assets.logout_icon}
             className="h-5 cursor-pointer hidden invert dark:invert-0 group-hover:block"
             alt="logout"
@@ -170,12 +218,7 @@ const SideBar = ({ isMenuOpen, setIsMenuOpen }) => {
       </div>
 
       {/* Close Icon for Mobile */}
-      <img
-        onClick={() => setIsMenuOpen(false)}
-        src={assets.close_icon}
-        className="absolute top-3 right-3 w-5 h-5 cursor-pointer md:hidden invert dark:invert-0"
-        alt="close"
-      />
+      <img onClick={() => setIsMenuOpen(false)} src={assets.close_icon} className="absolute top-3 right-3 w-5 h-5 cursor-pointer md:hidden invert dark:invert-0" alt="close" />
     </div>
   );
 };

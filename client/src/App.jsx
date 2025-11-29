@@ -9,16 +9,19 @@ import { assets } from "./assets/assets";
 import './assets/prism.css'
 import { useAppContext } from "./context/AppContext";
 import Login from "./pages/Login";
+import {Toaster} from 'react-hot-toast'
 
 const App = () => {
-  const {user} = useAppContext()
+  const {user,loadingUser} = useAppContext()
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const {pathname} = useLocation()
 
-  if(pathname === '/loading') return <Loading/>
+  if(pathname === '/loading'|| loadingUser) return <Loading/>
 
   return (
+    <>
+    <Toaster/>
     <div className="relative dark:bg-gradient-to-b from-[#242124] to-[#000000] dark:text-white h-screen w-screen flex overflow-hidden">
       
       {/* Mobile menu icon */}
@@ -51,6 +54,7 @@ const App = () => {
         </div>
       )}
     </div>
+    </>
     
   );
 };

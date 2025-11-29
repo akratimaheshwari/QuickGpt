@@ -4,37 +4,26 @@ import Stripe from 'stripe';
 const plans = [
     
   {
-    _id: "basic",
-    name: "Basic",
-    price: 10,
-    credits: 100,
-    features: [
-      "Basic AI chat",
-      "Limited message history"
-    ]
-  },
-  {
-    _id: "pro",
-    name: "Pro",
-    price: 20,
-    credits: 500,
-    features: [
-      "Text AI chat",
-      "Basic image generation",
-      "Email support"
-    ]
-  },
-  {
-    _id: "premium",
-    name: "premium",
-    price: 30,
-    credits: 1000,
-    features: [
-      "AI text + image generation",
-      "Priority support",
-      "Unlimited chat history"
-    ]
-  }
+        _id: "basic",
+        name: "Basic",
+        price: 10,
+        credits: 100,
+        features: ['100 text generations', '50 image generations', 'Standard support', 'Access to basic models']
+    },
+    {
+        _id: "pro",
+        name: "Pro",
+        price: 20,
+        credits: 500,
+        features: ['500 text generations', '200 image generations', 'Priority support', 'Access to pro models', 'Faster response time']
+    },
+    {
+        _id: "premium",
+        name: "Premium",
+        price: 30,
+        credits: 1000,
+        features: ['1000 text generations', '500 image generations', '24/7 VIP support', 'Access to premium models', 'Dedicated account manager']
+    }
 ]
 //api for getting all plans
 export const getPlans = async (req,res)=>{
@@ -49,7 +38,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 export const purchansePlan = async (req,res)=>{
     try {
         const {planId} = req.body
-        const userid = req.user._id
+        const userId = req.user._id
         const plan = plans.find(plan => plan._id===planId)
 
         if(!plan){

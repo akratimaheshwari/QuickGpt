@@ -1,21 +1,31 @@
 import jwt from "jsonwebtoken";
-import User from '../models/User.js'
+import User from "../models/User.js";
 
-export const protect = async (req,res,next)=>{
-    let token = req.headers.authorization;
+export const protect = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
 
-    try {
-        const decoded = jwt.verify(token,process.env.JWT_SECRET)
-        const userId = decoded.id;
+  // 1. Check if header exists
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, message: "No token provided" });
+  }
 
-        const user = await User.findById(userId)
+  // 2. Extract token only
+  const token = authHeader.split(" ")[1];
 
-        if(!user){
-            return res.json({success:false,message:"Not authorized,user not found"});
-        }
-        req.user = user;
-        next()
-    } catch (error) {
-        res.status(401).json({message:"Not authorized,token failed"})
+  try {
+    // 3. Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // 4. Fetch user
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: "User not found" });
     }
-}
+
+    req.user = user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: "Invalid or expired token" });
+  }
+};
