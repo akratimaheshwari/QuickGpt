@@ -17,7 +17,7 @@ app.post('/api/stripe',express.raw({type: 'application/json'}),stripeWebhooks)
 
 //middleware
 app.use(cors({
-  origin: "https://quick-gpt-kappa-azure.vercel.app",
+  origin: ["https://quick-7gubgpt-akrati-maheshwaris-projects.vercel.app", "https://quick-gpt-pink-ten.vercel.app", "http://localhost:5173"],
   credentials: true
 }));
 app.use(express.json())
