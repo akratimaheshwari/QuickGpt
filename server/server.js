@@ -16,7 +16,10 @@ await connectDB()
 app.post('/api/stripe',express.raw({type: 'application/json'}),stripeWebhooks)
 
 //middleware
-app.use(cors());
+app.use(cors({
+  origin: "https://quick-gpt-kappa-azure.vercel.app",
+  credentials: true
+}));
 app.use(express.json())
 
 //route
