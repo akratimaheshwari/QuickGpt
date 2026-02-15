@@ -7,112 +7,156 @@ import toast from 'react-hot-toast'
 const ChatBox = () => {
   const containerRef = useRef(null)
 
-  const { selectedChat, theme,user,axios,token,setUser,setChats,setSelectedChat } = useAppContext()
+  const {
+    selectedChat,
+    theme,
+    user,
+    axios,
+    token,
+    setUser,
+    setChats,
+    setSelectedChat,
+    chats
+  } = useAppContext()
+
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [mode, setMode] = useState('text')
   const [isPublished, setIsPublished] = useState(false)
 
-const onSubmit = async (e) => {
-  e.preventDefault();
-  if (!user) return toast.error("Login to send message");
-  if (!prompt.trim()) return;
+  // --------------------------------------------------------------
+  // Load chat history only when selectedChat changes (CORRECT FIX)
+  // --------------------------------------------------------------
+  useEffect(() => {
+  if (!selectedChat) return
 
-  try {
-    setLoading(true);
-    const promptCopy = prompt;
-    setPrompt("");
-
-    // If no chat selected, create a new one via backend
-    if (!selectedChat) {
-      const { data } = await axios.get("/api/chat/create", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  const fetchMessages = async () => {
+    try {
+      const { data } = await axios.get(
+        `/api/message/${selectedChat._id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
 
       if (data.success) {
-        // Refresh chats list in context
-        await fetchUserChats();
-        // Select the latest chat
-        const latestChat = data.chat || chats[0];
-        setSelectedChat(latestChat);
-      } else {
-        toast.error(data.message);
-        setPrompt(promptCopy);
-        setLoading(false);
-        return;
+        setMessages(data.messages)
       }
+    } catch (error) {
+      console.log(error)
     }
-
-    // Add user message locally immediately
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: promptCopy, timestamp: Date.now(), isImage: false },
-    ]);
-
-    // Send message to backend
-    const { data } = await axios.post(
-      `/api/message/${mode}`,
-      { chatId: selectedChat._id, prompt: promptCopy, isPublished },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    if (data.success) {
-      // Add reply from backend
-      setMessages((prev) => [...prev, data.reply]);
-
-      // Decrease user credits
-      setUser((prev) => ({
-        ...prev,
-        credits: prev.credits - (mode === "image" ? 2 : 1),
-      }));
-    } else {
-      toast.error(data.message);
-      setPrompt(promptCopy);
-    }
-  } catch (error) {
-    toast.error(error.response?.data?.message || error.message);
-    setPrompt(prompt);
-  } finally {
-    setLoading(false);
   }
-};
 
+  fetchMessages()
+}, [selectedChat])
 
-  // Ensure messages is ALWAYS an array
-  useEffect(() => {
-    if (!selectedChat) {
-      setMessages([])
-      return
-    }
-
-    const msgs = selectedChat?.messages
-    if (Array.isArray(msgs)) setMessages(msgs)
-    else if (msgs == null) setMessages([])
-    else {
-      // If messages is a single object (rare), convert to array safely
-      setMessages([msgs])
-    }
-  }, [selectedChat])
-
-  // Auto-scroll when messages or loading changes
+  // Auto-scroll
   useEffect(() => {
     if (containerRef.current) {
-      // more reliable than scrollTo in some layouts
       containerRef.current.scrollTop = containerRef.current.scrollHeight
     }
   }, [messages, loading])
 
-  const msgsToRender = Array.isArray(messages) ? messages : []
+  const onSubmit = async (e) => {
+    e.preventDefault()
+    if (!user) return toast.error("Login to send message")
+    if (!prompt.trim()) return
+
+    try {
+      setLoading(true)
+      const promptCopy = prompt
+      setPrompt("")
+
+      let chat = selectedChat
+
+      // Create chat if none exists
+      if (!chat) {
+        const { data } = await axios.get("/api/chat/create", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (!data.success) {
+          toast.error(data.message)
+          setPrompt(promptCopy)
+          setLoading(false)
+          return
+        }
+
+        setChats(prev => [data.chat, ...prev])
+        setSelectedChat(data.chat)
+        chat = data.chat
+      }
+
+      // --------------------------------------------------------------
+      // 1️⃣ SHOW USER MESSAGE IMMEDIATELY
+      // --------------------------------------------------------------
+      const userMsg = {
+        role: "user",
+        content: promptCopy,
+        timestamp: Date.now(),
+        isImage: false
+      }
+
+      setMessages(prev => [...prev, userMsg])
+
+      // --------------------------------------------------------------
+      // Send message to backend
+      // --------------------------------------------------------------
+      const { data } = await axios.post(
+        `/api/message/${mode}`,
+        {
+          chatId: chat._id,
+          prompt: promptCopy,
+          isPublished
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      if (!data.success) {
+        toast.error(data.message)
+        setPrompt(promptCopy)
+        return
+      }
+
+      const botReply = data.reply
+
+      // --------------------------------------------------------------
+      // 2️⃣ ADD BOT MESSAGE TO UI
+      // --------------------------------------------------------------
+      setMessages(prev => [...prev, botReply])
+
+      // --------------------------------------------------------------
+      // 3️⃣ UPDATE selectedChat ONCE (IMPORTANT FIX)
+      // --------------------------------------------------------------
+      setSelectedChat(prev => ({
+        ...prev,
+        messages: [...(prev?.messages || []), userMsg, botReply]
+      }))
+
+      // Reduce user credits
+      setUser(prev => ({
+        ...prev,
+        credits: prev.credits - (mode === "image" ? 2 : 1)
+      }))
+
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message)
+      setPrompt(prompt)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className='flex-1 flex flex-col justify-between m-5 md:m-10 xl:mx-30 max-md:mt-14 2xl:pr-40'>
-      {/* Messages Section */}
+      
+      {/* Messages Area */}
       <div
         ref={containerRef}
         className='flex-1 mb-5 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600'
       >
-        {msgsToRender.length === 0 ? (
+        {messages.length === 0 ? (
           <div className='h-full flex flex-col items-center justify-center gap-2 text-primary'>
             <img
               src={theme === 'dark' ? assets.logo_full : assets.logo_full_dark}
@@ -124,12 +168,11 @@ const onSubmit = async (e) => {
             </p>
           </div>
         ) : (
-          msgsToRender.map((message, index) => (
+          messages.map((message, index) => (
             <Message key={message?._id ?? index} message={message} />
           ))
         )}
 
-        {/* Typing Loader */}
         {loading && (
           <div className='loader flex items-center gap-1.5 mt-2'>
             <div className='w-1.5 h-1.5 rounded-full bg-gray-500 dark:bg-white animate-bounce'></div>
@@ -152,7 +195,7 @@ const onSubmit = async (e) => {
         </label>
       )}
 
-      {/* Prompt Input Box */}
+      {/* Prompt Input */}
       <form
         onSubmit={onSubmit}
         className='bg-primary/20 dark:bg-[#583C79]/30 border border-primary dark:border-[#80609F]/30 rounded-full w-full max-w-2xl p-3 pl-4 mx-auto flex gap-4 items-center'
@@ -162,8 +205,8 @@ const onSubmit = async (e) => {
           value={mode}
           className='text-sm pl-3 pr-2 outline-none'
         >
-          <option className='dark:bg-purple-900' value='text'>Text</option>
-          <option className='dark:bg-purple-900' value='image'>Image</option>
+          <option value='text'>Text</option>
+          <option value='image'>Image</option>
         </select>
 
         <input
@@ -183,6 +226,7 @@ const onSubmit = async (e) => {
           />
         </button>
       </form>
+
     </div>
   )
 }
